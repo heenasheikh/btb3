@@ -104,7 +104,8 @@ func (b *binder) merge(cts []*sql.ColumnType) (err error) {
 	for _, v := range cts {
 		if f := b.keys[v.Name()]; f.CanAddr() && f.Addr().CanInterface() {
 			// 要先检查类型是否匹配
-			if b.canScan(v.ScanType(), f.Type()) {
+
+			if b.canScan(v, f.Type()) {
 				b.fields = append(b.fields, f.Addr().Interface())
 			} else {
 				log.Println("ParseRows type not pare -> ", v.Name(), v.DatabaseTypeName(), v.ScanType(), f.Type())
@@ -115,20 +116,26 @@ func (b *binder) merge(cts []*sql.ColumnType) (err error) {
 				如果查询出的字段，不在struct有标记的field中，会导致Scan时数量对不上的问题
 				为了补齐，需创建一个对应字段类型的变量指针
 			*/
-			f := reflect.New(v.ScanType())
-			b.fields = append(b.fields, f.Interface())
+			f := reflect.New(v.ScanType()).Interface()
+			b.fields = append(b.fields, &f)
 		}
 	}
 	return
 }
 
-func (b *binder) canScan(t1 reflect.Type, t2 reflect.Type) bool {
-	if t1 == t2 {
+func (b *binder) canScan(t1 *sql.ColumnType, t2 reflect.Type) bool {
+	if t1.ScanType() == t2 || "*"+t1.ScanType().String() == t2.String() {
 		return true
 	} else {
-		if t1.String()[0:3] == "int" {
-			return t1.String()[0:3] == "int" && t2.String()[0:3] == "int"
-		} else if t1.String() == "time.Time" && t2.String() == "pq.NullTime" {
+		if t1.DatabaseTypeName()[0:3] == "INT" {
+			return t1.ScanType().String()[0:3] == "int" && t2.String()[0:3] == "int"
+		} else if t1.ScanType().String() == "time.Time" && t2.String() == "pq.NullTime" {
+			return true
+		} else if t1.DatabaseTypeName() == "_INT4" && t2.String() == "pq.Int64Array" {
+			return true
+		} else if t1.DatabaseTypeName() == "_VARCHAR" && t2.String() == "pq.StringArray" {
+			return true
+		} else if t1.DatabaseTypeName() == "TEXT" && t2.String() == "sql.NullString" {
 			return true
 		} else {
 			return false
@@ -161,9 +168,9 @@ func (b *binder) decode(v reflect.Value) {
 }
 
 func (b *binder) getTag(t reflect.StructTag) (tag string) {
-	if tag = t.Get("json"); tag == "" {
-		if tag = t.Get("xml"); tag == "" {
-			tag = t.Get("sql")
+	if tag = t.Get("sql"); tag == "" {
+		if tag = t.Get("json"); tag == "" {
+			tag = t.Get("xml")
 		}
 	}
 	return
