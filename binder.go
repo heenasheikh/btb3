@@ -116,15 +116,15 @@ func (b *binder) merge(cts []*sql.ColumnType) (err error) {
 				如果查询出的字段，不在struct有标记的field中，会导致Scan时数量对不上的问题
 				为了补齐，需创建一个对应字段类型的变量指针
 			*/
-			f := reflect.New(v.ScanType())
-			b.fields = append(b.fields, f.Interface())
+			f := reflect.New(v.ScanType()).Interface()
+			b.fields = append(b.fields, &f)
 		}
 	}
 	return
 }
 
 func (b *binder) canScan(t1 *sql.ColumnType, t2 reflect.Type) bool {
-	if t1.ScanType() == t2 {
+	if t1.ScanType() == t2 || "*"+t1.ScanType().String() == t2.String() {
 		return true
 	} else {
 		if t1.DatabaseTypeName()[0:3] == "INT" {
